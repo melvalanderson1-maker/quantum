@@ -7,6 +7,7 @@ const productoRoutes = require("./src/routes/producto.routes");
 
 const app = express();
 
+// 🔥 CORS (ojo luego te explico producción)
 app.use(cors({
     origin: "http://localhost:5173",
     credentials: true
@@ -15,6 +16,18 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+/* =========================
+   🔥 RUTA PRINCIPAL API
+   ========================= */
+app.get("/", (req, res) => {
+    res.json({
+        message: "API funcionando correctamente 🚀"
+    });
+});
+
+/* =========================
+   RUTAS DEL SISTEMA
+   ========================= */
 app.use("/api/auth", authRoutes);
 app.use("/api/productos", productoRoutes);
 
