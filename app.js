@@ -32,6 +32,13 @@ const loginLimiter = rateLimit({
     max: 5,
     message: "Demasiados intentos, intenta más tarde"
 });
+
+app.get("/", (req, res) => {
+    res.json({
+        message: "API POWER funcionando correctamente ",
+        status: "OK"
+    });
+});
 // ROUTES
 app.use("/api/auth", authRoutes);
 app.use("/api/productos", productoRoutes);
