@@ -1,9 +1,15 @@
 const mysql = require("mysql2/promise");
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+const dotenv = require("dotenv");
 
+// 🔥 FORZAR ruta absoluta correcta
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+// DEBUG REAL
+console.log("ENV CHECK:");
+console.log("DB_HOST:", process.env.DB_HOST);
 console.log("DB_USER:", process.env.DB_USER);
-console.log("DB_PASSWORD:", process.env.DB_PASSWORD);
+console.log("DB_PASSWORD:", process.env.DB_PASSWORD ? "OK" : "MISSING");
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
