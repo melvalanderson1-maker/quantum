@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 
-// LISTAR TODOS
+// LISTAR
 exports.obtenerClientes = async (req, res) => {
     try {
         const [rows] = await pool.query("SELECT * FROM clientes");
@@ -35,14 +35,23 @@ exports.crearCliente = async (req, res) => {
     try {
         const { nombre, correo, telefono, empresa, estado } = req.body;
 
-        await pool.query(
-            `INSERT INTO clientes 
-            (nombre, correo, telefono, empresa, estado)
-            VALUES (?, ?, ?, ?, ?)`,
+        const [result] = await pool.query(
+            `INSERT INTO clientes (nombre, correo, telefono, empresa, estado)
+             VALUES (?, ?, ?, ?, ?)`,
             [nombre, correo, telefono, empresa, estado || "Potencial"]
         );
 
-        res.json({ message: "Cliente creado" });
+        // 🔥 traer objeto real de DB (IMPORTANTE PRO)
+        const [rows] = await pool.query(
+            "SELECT * FROM clientes WHERE id = ?",
+            [result.insertId]
+        );
+
+        const nuevoCliente = rows[0];
+
+        req.app.get("io").emit("cliente:created", nuevoCliente);
+
+        res.json(nuevoCliente);
     } catch (error) {
         res.status(500).json({ message: "Error al crear cliente" });
     }
@@ -61,7 +70,17 @@ exports.actualizarCliente = async (req, res) => {
             [nombre, correo, telefono, empresa, estado, id]
         );
 
-        res.json({ message: "Cliente actualizado" });
+        // 🔥 SIEMPRE DEVOLVER DATA REAL
+        const [rows] = await pool.query(
+            "SELECT * FROM clientes WHERE id = ?",
+            [id]
+        );
+
+        const clienteActualizado = rows[0];
+
+        req.app.get("io").emit("cliente:updated", clienteActualizado);
+
+        res.json(clienteActualizado);
     } catch (error) {
         res.status(500).json({ message: "Error al actualizar cliente" });
     }
@@ -72,10 +91,11 @@ exports.eliminarCliente = async (req, res) => {
     try {
         const { id } = req.params;
 
-        await pool.query(
-            "DELETE FROM clientes WHERE id = ?",
-            [id]
-        );
+        await pool.query("DELETE FROM clientes WHERE id = ?", [id]);
+
+        req.app.get("io").emit("cliente:deleted", {
+            id: Number(id)
+        });
 
         res.json({ message: "Cliente eliminado" });
     } catch (error) {

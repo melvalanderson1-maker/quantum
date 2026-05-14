@@ -1,18 +1,31 @@
 require("dotenv").config();
 
+const http = require("http");
+const { Server } = require("socket.io");
 
 const app = require("./app");
 const pool = require("./src/config/db");
 
-// =====================================================
-// PUERTO API
-// =====================================================
-
 const PORT = 3000;
 
-// =====================================================
-// INICIAR SERVIDOR
-// =====================================================
+const server = http.createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: "http://localhost:5173",
+        credentials: true
+    }
+});
+
+app.set("io", io);
+
+io.on("connection", (socket) => {
+    console.log("🟢 Usuario conectado:", socket.id);
+
+    socket.on("disconnect", () => {
+        console.log("🔴 Usuario desconectado:", socket.id);
+    });
+});
 
 async function iniciarServidor() {
 
@@ -20,53 +33,30 @@ async function iniciarServidor() {
 
         console.log("🔌 Probando conexión MySQL...");
 
-        // =====================================================
-        // TEST CONEXIÓN
-        // =====================================================
-
         const connection = await pool.getConnection();
 
         console.log("✅ MYSQL CONECTADO CORRECTAMENTE");
 
-        // =====================================================
-        // QUERY TEST
-        // =====================================================
-
-        const [rows] = await connection.query(
-            "SELECT NOW() AS fecha"
-        );
+        const [rows] = await connection.query("SELECT NOW() AS fecha");
 
         console.log("🕒 Hora MySQL:");
         console.log(rows[0].fecha);
 
-        // =====================================================
-        // LIBERAR CONEXIÓN
-        // =====================================================
-
         connection.release();
 
-        console.log("🔒 Conexión liberada");
-
-        // =====================================================
-        // LEVANTAR EXPRESS
-        // =====================================================
-
-        app.listen(PORT, () => {
+        server.listen(PORT, () => {
 
             console.log("=================================");
-            console.log(`🚀 API corriendo en puerto ${PORT}`);
+            console.log(`🚀 API + SOCKET.IO en puerto ${PORT}`);
             console.log(`🌐 http://localhost:${PORT}`);
             console.log("=================================");
 
         });
 
     } catch (error) {
-
         console.log("❌ ERROR MYSQL");
         console.log(error);
-
     }
-
 }
 
 iniciarServidor();
