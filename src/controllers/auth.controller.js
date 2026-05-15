@@ -57,6 +57,21 @@ exports.login = async (req, res) => {
 
     const user = rows[0];
 
+
+    // =========================
+    // PERMISOS USUARIO
+    // =========================
+
+    const [permisosRows] = await pool.query(`
+        SELECT p.codigo
+        FROM usuario_permisos up
+        INNER JOIN permisos p
+            ON p.id = up.permiso_id
+        WHERE up.usuario_id = ?
+    `, [user.id]);
+
+    const permisos = permisosRows.map(p => p.codigo);
+
     // =========================
     // 2. PASSWORD
     // =========================
@@ -180,6 +195,8 @@ exports.login = async (req, res) => {
     return res.json({
         id: user.id,
         nombre: user.nombre,
-        rol: user.rol
+        email: user.email,
+        rol: user.rol,
+        permisos
     });
 };

@@ -5,6 +5,9 @@ const rateLimit = require("express-rate-limit");
 const authRoutes = require("./src/routes/auth.routes");
 const productoRoutes = require("./src/routes/producto.routes");
 const clientesRoutes = require("./src/routes/clientes.routes");
+const usuariosRoutes = require("./src/routes/usuarios.routes");
+
+const analyticsRoutes = require("./src/routes/analytics.routes");
 
 const app = express();
 
@@ -23,7 +26,11 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
-app.use(helmet());
+app.use(
+    helmet({
+        crossOriginResourcePolicy: false
+    })
+);
 
 
 
@@ -43,5 +50,8 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/productos", productoRoutes);
 app.use("/api/clientes", clientesRoutes);
+app.use("/api/usuarios", usuariosRoutes);
+
+app.use("/api/analytics", analyticsRoutes);
 
 module.exports = app;
