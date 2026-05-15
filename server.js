@@ -24,7 +24,7 @@ const io = new Server(server, {
 
     cors: {
         origin: [
-            " https://fygradev.gruecolimp.com",
+            "https://fygradev.gruecolimp.com",
 
            
         ],
