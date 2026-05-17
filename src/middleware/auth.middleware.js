@@ -1,18 +1,18 @@
-const jwt = require("jsonwebtoken");
+    const jwt = require("jsonwebtoken");
 
-module.exports = (req, res, next) => {
+    module.exports = (req, res, next) => {
 
-    const token = req.cookies.token;
+        const token = req.cookies.token;
 
-    if (!token) {
-        return res.status(401).json({ message: "No autorizado" });
-    }
+        if (!token) {
+            return res.status(401).json({ message: "No autorizado" });
+        }
 
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
-        next();
-    } catch (err) {
-        return res.status(401).json({ message: "Token inválido o expirado" });
-    }
-};
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = decoded;
+            next();
+        } catch (err) {
+            return res.status(401).json({ message: "Token inválido o expirado" });
+        }
+    };
