@@ -162,7 +162,7 @@ exports.proveedoresTotales = async (req, res) => {
                 AS proveedor,
 
                 ROUND(
-                    SUM(monto_total_entrega),
+                    SUM(subtotal),
                     2
                 ) AS subtotal,
 

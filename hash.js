@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 
 async function generarHash() {
-    const password = "123456";
+    const password = "Datapro2026#";
 
     const hash = await bcrypt.hash(password, 10);
 
