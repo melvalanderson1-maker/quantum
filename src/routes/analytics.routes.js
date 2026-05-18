@@ -1,15 +1,45 @@
 const router = require("express").Router();
+
 const controller = require("../controllers/analytics.controller");
+
 const auth = require("../middleware/auth.middleware");
 
-// =========================
-// NUEVAS RUTAS BI
-// =========================
+// ======================================================
+// KPIS
+// ======================================================
 
-router.get("/resumen", auth, controller.obtenerResumen);
+router.get(
+    "/resumen",
+    auth,
+    controller.obtenerResumen
+);
 
-router.get("/productos-top", auth, controller.productosTop);
+router.get(
+    "/proveedores",
+    auth,
+    controller.proveedoresTotales
+);
 
-router.get("/ventas-segmento", auth, controller.ventasPorSegmento);
+// ======================================================
+// FILTROS
+// ======================================================
+
+router.get(
+    "/acuerdos",
+    auth,
+    controller.obtenerAcuerdos
+);
+
+router.get(
+    "/anios",
+    auth,
+    controller.obtenerAnios
+);
+
+router.get(
+    "/meses",
+    auth,
+    controller.obtenerMeses
+);
 
 module.exports = router;
