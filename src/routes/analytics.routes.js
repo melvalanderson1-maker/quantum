@@ -42,4 +42,15 @@ router.get(
     controller.obtenerMeses
 );
 
+
+
+router.get("/entidades", auth, controller.obtenerEntidades);
+router.get("/lista-proveedores", auth, controller.obtenerListaProveedores);
+router.get("/categorias", auth, controller.obtenerCategorias);
+router.get("/departamentos", auth, controller.obtenerDepartamentos);
+router.get("/provincias", auth, controller.obtenerProvincias);
+router.get("/distritos", auth, controller.obtenerDistritos);
+
+
+
 module.exports = router;

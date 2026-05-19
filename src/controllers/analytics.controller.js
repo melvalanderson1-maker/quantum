@@ -11,75 +11,95 @@ const construirFiltros = (query) => {
         anio,
         mes,
         dia,
-        proveedor
+        proveedor,
+        entidad,
+        categoria,
+        departamento,
+        provincia,
+        distrito
     } = query;
 
     let where = [];
     let params = [];
 
-    // =========================================
+    // =========================
     // ACUERDO
-    // =========================================
-
+    // =========================
     if (acuerdo_marco) {
-
-        where.push(`
-            acuerdo_marco = ?
-        `);
-
+        where.push(`acuerdo_marco = ?`);
         params.push(acuerdo_marco);
     }
 
-    // =========================================
+    // =========================
     // AÑO
-    // =========================================
-
+    // =========================
     if (anio) {
-
-        where.push(`
-            YEAR(fecha_aceptacion) = ?
-        `);
-
+        where.push(`YEAR(fecha_aceptacion) = ?`);
         params.push(anio);
     }
 
-    // =========================================
+    // =========================
     // MES
-    // =========================================
-
+    // =========================
     if (mes) {
-
-        where.push(`
-            MONTH(fecha_aceptacion) = ?
-        `);
-
+        where.push(`MONTH(fecha_aceptacion) = ?`);
         params.push(mes);
     }
 
-    // =========================================
+    // =========================
     // DIA
-    // =========================================
-
+    // =========================
     if (dia) {
-
-        where.push(`
-            DAY(fecha_aceptacion) = ?
-        `);
-
+        where.push(`DAY(fecha_aceptacion) = ?`);
         params.push(dia);
     }
 
-    // =========================================
+    // =========================
     // PROVEEDOR
-    // =========================================
-
+    // =========================
     if (proveedor) {
-
-        where.push(`
-            razon_social_proveedor = ?
-        `);
-
+        where.push(`razon_social_proveedor = ?`);
         params.push(proveedor);
+    }
+
+    // =========================
+    // ENTIDAD (NUEVO)
+    // =========================
+    if (entidad) {
+        where.push(`razon_social_entidad = ?`);
+        params.push(entidad);
+    }
+
+    // =========================
+    // CATEGORIA (NUEVO)
+    // =========================
+    if (categoria) {
+        where.push(`categoria = ?`);
+        params.push(categoria);
+    }
+
+    // =========================
+    // DEPARTAMENTO (NUEVO)
+    // =========================
+    if (departamento) {
+        where.push(`dep_entrega = ?`);
+        params.push(departamento);
+    }
+
+    // =========================
+    // PROVINCIA (NUEVO)
+    // =========================
+    if (provincia) {
+        where.push(`prov_entrega = ?`);
+        params.push(provincia);
+    }
+
+    // =========================
+    // DISTRITO (NUEVO)
+    // =========================
+    if (distrito) {
+        where.push(`dist_entrega = ?`);
+        params.push(distrito);
     }
 
     const whereSQL =
@@ -87,10 +107,7 @@ const construirFiltros = (query) => {
             ? `WHERE ${where.join(" AND ")}`
             : "";
 
-    return {
-        whereSQL,
-        params
-    };
+    return { whereSQL, params };
 };
 
 // ======================================================
@@ -286,5 +303,125 @@ exports.obtenerMeses = async (req, res) => {
         res.status(500).json({
             message: "ERROR_MESES"
         });
+    }
+};
+
+
+
+exports.obtenerEntidades = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT razon_social_entidad
+            FROM ordenes_electronicas
+            WHERE razon_social_entidad IS NOT NULL
+            AND razon_social_entidad <> ''
+            ORDER BY razon_social_entidad ASC
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_ENTIDADES" });
+    }
+};
+
+
+exports.obtenerListaProveedores = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT razon_social_proveedor
+            FROM ordenes_electronicas
+            WHERE razon_social_proveedor IS NOT NULL
+            AND razon_social_proveedor <> ''
+            ORDER BY razon_social_proveedor ASC
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_PROVEEDORES_LISTA" });
+    }
+};
+
+
+exports.obtenerCategorias = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT categoria
+            FROM ordenes_electronicas
+            WHERE categoria IS NOT NULL
+            AND categoria <> ''
+            ORDER BY categoria ASC
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_CATEGORIAS" });
+    }
+};
+
+
+
+exports.obtenerDepartamentos = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT dep_entrega
+            FROM ordenes_electronicas
+            WHERE dep_entrega IS NOT NULL
+            AND dep_entrega <> ''
+            ORDER BY dep_entrega ASC
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_DEP" });
+    }
+};
+
+
+
+
+
+exports.obtenerProvincias = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT prov_entrega
+            FROM ordenes_electronicas
+            WHERE prov_entrega IS NOT NULL
+            AND prov_entrega <> ''
+            ORDER BY prov_entrega ASC
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_PROV" });
+    }
+};
+
+
+
+exports.obtenerDistritos = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT DISTINCT dist_entrega
+            FROM ordenes_electronicas
+            WHERE dist_entrega IS NOT NULL
+            AND dist_entrega <> ''
+            ORDER BY dist_entrega ASC
+        `);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_DIST" });
     }
 };
