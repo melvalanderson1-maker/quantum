@@ -16,7 +16,8 @@ const construirFiltros = (query) => {
         categoria,
         departamento,
         provincia,
-        distrito
+        distrito,
+        nro_parte
     } = query;
 
     let where = [];
@@ -26,7 +27,7 @@ const construirFiltros = (query) => {
     // ACUERDO
     // =========================
     if (acuerdo_marco) {
-        where.push(`acuerdo_marco = ?`);
+        where.push(`oe.acuerdo_marco = ?`);
         params.push(acuerdo_marco);
     }
 
@@ -34,7 +35,7 @@ const construirFiltros = (query) => {
     // AÑO
     // =========================
     if (anio) {
-        where.push(`YEAR(fecha_aceptacion) = ?`);
+        where.push(`YEAR(oe.fecha_aceptacion) = ?`);
         params.push(anio);
     }
 
@@ -42,7 +43,7 @@ const construirFiltros = (query) => {
     // MES
     // =========================
     if (mes) {
-        where.push(`MONTH(fecha_aceptacion) = ?`);
+        where.push(`MONTH(oe.fecha_aceptacion) = ?`);
         params.push(mes);
     }
 
@@ -50,7 +51,7 @@ const construirFiltros = (query) => {
     // DIA
     // =========================
     if (dia) {
-        where.push(`DAY(fecha_aceptacion) = ?`);
+        where.push(`DAY(oe.fecha_aceptacion) = ?`);
         params.push(dia);
     }
 
@@ -58,7 +59,7 @@ const construirFiltros = (query) => {
     // PROVEEDOR
     // =========================
     if (proveedor) {
-        where.push(`razon_social_proveedor = ?`);
+        where.push(`oe.razon_social_proveedor = ?`);
         params.push(proveedor);
     }
 
@@ -66,7 +67,7 @@ const construirFiltros = (query) => {
     // ENTIDAD (NUEVO)
     // =========================
     if (entidad) {
-        where.push(`razon_social_entidad = ?`);
+        where.push(`oe.razon_social_entidad = ?`);
         params.push(entidad);
     }
 
@@ -74,7 +75,7 @@ const construirFiltros = (query) => {
     // CATEGORIA (NUEVO)
     // =========================
     if (categoria) {
-        where.push(`categoria = ?`);
+        where.push(`oe.categoria = ?`);
         params.push(categoria);
     }
 
@@ -82,7 +83,7 @@ const construirFiltros = (query) => {
     // DEPARTAMENTO (NUEVO)
     // =========================
     if (departamento) {
-        where.push(`dep_entrega = ?`);
+        where.push(`oe.dep_entrega = ?`);
         params.push(departamento);
     }
 
@@ -90,7 +91,7 @@ const construirFiltros = (query) => {
     // PROVINCIA (NUEVO)
     // =========================
     if (provincia) {
-        where.push(`prov_entrega = ?`);
+        where.push(`oe.prov_entrega = ?`);
         params.push(provincia);
     }
 
@@ -98,8 +99,25 @@ const construirFiltros = (query) => {
     // DISTRITO (NUEVO)
     // =========================
     if (distrito) {
-        where.push(`dist_entrega = ?`);
+        where.push(`oe.dist_entrega = ?`);
         params.push(distrito);
+    }
+
+    // =========================
+    // NRO PARTE
+    // =========================
+
+    if (nro_parte) {
+
+        const nroParteLimpio = nro_parte
+            .trim()
+            .replace(/\s+/g, "")
+            .replace(/-/g, "")
+            .toUpperCase();
+
+        where.push(`oe.nro_parte_clean = ?`);
+
+        params.push(nroParteLimpio);
     }
 
     const whereSQL =
@@ -132,7 +150,7 @@ exports.obtenerResumen = async (req, res) => {
                 AS ordenes,
 
                 ROUND(
-                    SUM(monto_total_entrega),
+                    SUM(subtotal),
                     2
                 ) AS ventas,
 
@@ -142,7 +160,7 @@ exports.obtenerResumen = async (req, res) => {
                 COUNT(DISTINCT marca_ficha_producto)
                 AS marcas
 
-            FROM ordenes_electronicas
+            FROM ordenes_electronicas oe
 
             ${whereSQL}
         `, params);
@@ -175,22 +193,22 @@ exports.proveedoresTotales = async (req, res) => {
         const [rows] = await pool.query(`
             SELECT
 
-                razon_social_proveedor
+                oe.razon_social_proveedor
                 AS proveedor,
 
                 ROUND(
-                    SUM(subtotal),
+                    SUM(oe.subtotal),
                     2
                 ) AS subtotal,
 
-                COUNT(DISTINCT orden_electronica)
+                COUNT(DISTINCT oe.orden_electronica)
                 AS ordenes
 
-            FROM ordenes_electronicas
+            FROM ordenes_electronicas oe
 
             ${whereSQL}
 
-            GROUP BY razon_social_proveedor
+            GROUP BY oe.razon_social_proveedor
 
             ORDER BY subtotal DESC
 
@@ -423,5 +441,223 @@ exports.obtenerDistritos = async (req, res) => {
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: "ERROR_DIST" });
+    }
+};
+
+
+
+exports.obtenerOrdenesDetalle = async (req, res) => {
+
+    try {
+
+        const { whereSQL, params } = construirFiltros(req.query);
+
+        const [rows] = await pool.query(`
+            SELECT
+
+                pi.imagen_url,
+
+                oe.categoria,
+
+                oe.nro_parte,
+
+                oe.razon_social_proveedor,
+
+                oe.razon_social_entidad,
+
+                oe.precio_unitario,
+
+                oe.cantidad_entrega,
+
+                oe.subtotal,
+
+                oe.fecha_aceptacion,
+
+                oe.orden_digitalizada,
+
+                oe.informe_sustento
+            FROM ordenes_electronicas oe
+
+            LEFT JOIN productos_imagenes pi
+            ON oe.nro_parte_clean = pi.nro_parte_clean
+
+            ${whereSQL}
+            ORDER BY oe.fecha_aceptacion DESC
+            LIMIT 500
+        `, params);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_DETALLE_ORDENES" });
+    }
+};
+
+
+
+exports.entidadesTotales = async (req, res) => {
+
+    try {
+
+        const { whereSQL, params } = construirFiltros(req.query);
+
+        const [rows] = await pool.query(`
+            SELECT
+
+                oe.razon_social_entidad AS entidad,
+
+                ROUND(SUM(oe.subtotal), 2) AS subtotal,
+
+                COUNT(DISTINCT oe.orden_electronica) AS ordenes
+
+            FROM ordenes_electronicas oe
+
+            ${whereSQL}
+
+            GROUP BY oe.razon_social_entidad
+
+            ORDER BY subtotal DESC
+
+            LIMIT 100
+        `, params);
+
+        res.json(rows);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "ERROR_ENTIDADES_TOTALES" });
+    }
+};
+
+
+
+
+// ======================================================
+// BUSCAR NRO PARTE
+// ======================================================
+
+// ======================================================
+// BUSCAR NRO PARTE
+// ======================================================
+
+exports.buscarNroParte = async (req, res) => {
+
+    try {
+
+        const {
+            nro_parte,
+            acuerdo_marco,
+            anio,
+            mes,
+            proveedor,
+            entidad,
+            categoria,
+            departamento,
+            provincia,
+            distrito
+        } = req.query;
+
+        // =========================
+        // VALIDACION
+        // =========================
+
+        if (!nro_parte || nro_parte.trim() === "") {
+
+            return res.json({
+                encontrado: false
+            });
+        }
+
+        // =========================
+        // LIMPIAR NRO PARTE
+        // =========================
+
+        const nroParteLimpio = nro_parte
+            .trim()
+            .replace(/\s+/g, "")
+            .replace(/-/g, "")
+            .toUpperCase();
+
+        // =========================
+        // FILTROS
+        // =========================
+
+        const {
+            whereSQL,
+            params
+        } = construirFiltros({
+            acuerdo_marco,
+            anio,
+            mes,
+            proveedor,
+            entidad,
+            categoria,
+            departamento,
+            provincia,
+            distrito
+        });
+
+        // =========================
+        // QUERY
+        // =========================
+
+        const [rows] = await pool.query(`
+
+            SELECT
+
+                MAX(pi.imagen_url) AS imagen_url,
+
+                MIN(oe.precio_unitario)
+                AS precio_minimo,
+
+                ROUND(
+                    AVG(oe.precio_unitario),
+                    2
+                ) AS precio_promedio,
+
+                MAX(oe.precio_unitario)
+                AS precio_maximo,
+
+                COUNT(*) AS registros
+
+            FROM ordenes_electronicas oe
+
+            LEFT JOIN productos_imagenes pi
+            ON oe.nro_parte_clean = pi.nro_parte_clean
+
+            WHERE oe.nro_parte_clean = ?
+
+            ${whereSQL
+                ? `AND ${whereSQL.replace("WHERE", "")}`
+                : ""
+            }
+
+            AND oe.precio_unitario IS NOT NULL
+
+        `, [nroParteLimpio, ...params]);
+
+        // =========================
+        // RESPUESTA
+        // =========================
+
+        res.json({
+            nro_parte: nro_parte,
+            imagen_url: rows[0]?.imagen_url || null,
+
+            
+            precio_minimo: rows[0]?.precio_minimo || 0,
+            precio_promedio: rows[0]?.precio_promedio || 0,
+            precio_maximo: rows[0]?.precio_maximo || 0,
+            registros: rows[0]?.registros || 0
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            message: "ERROR_BUSCAR_NRO_PARTE"
+        });
     }
 };

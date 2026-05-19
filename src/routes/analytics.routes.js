@@ -52,5 +52,25 @@ router.get("/provincias", auth, controller.obtenerProvincias);
 router.get("/distritos", auth, controller.obtenerDistritos);
 
 
+router.get(
+    "/ordenes-detalle",
+    auth,
+    controller.obtenerOrdenesDetalle
+);
+
+
+
+router.get(
+    "/entidades-totales",
+    auth,
+    controller.entidadesTotales
+);
+
+
+router.get(
+    "/buscar-nro-parte",
+    auth,
+    controller.buscarNroParte
+);
 
 module.exports = router;
