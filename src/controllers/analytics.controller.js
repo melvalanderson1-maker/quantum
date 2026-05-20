@@ -385,62 +385,140 @@ exports.obtenerCategorias = async (req, res) => {
 
 
 exports.obtenerDepartamentos = async (req, res) => {
+
     try {
+
+        const {
+            whereSQL,
+            params
+        } = construirFiltros(req.query);
+
+        // =========================
+        // WHERE EXTRA
+        // =========================
+
+        const extraWhere = whereSQL
+            ? `${whereSQL} AND`
+            : `WHERE`;
+
+        // =========================
+        // QUERY
+        // =========================
+
         const [rows] = await pool.query(`
-            SELECT DISTINCT dep_entrega
-            FROM ordenes_electronicas
-            WHERE dep_entrega IS NOT NULL
-            AND dep_entrega <> ''
-            ORDER BY dep_entrega ASC
-        `);
+
+            SELECT DISTINCT
+                oe.dep_entrega
+
+            FROM ordenes_electronicas oe
+
+            ${extraWhere}
+
+            oe.dep_entrega IS NOT NULL
+
+            AND oe.dep_entrega <> ''
+
+            ORDER BY oe.dep_entrega ASC
+
+        `, params);
 
         res.json(rows);
 
     } catch (error) {
+
         console.log(error);
-        res.status(500).json({ message: "ERROR_DEP" });
+
+        res.status(500).json({
+            message: "ERROR_DEP"
+        });
     }
 };
-
 
 
 
 
 exports.obtenerProvincias = async (req, res) => {
+
     try {
+
+        const {
+            whereSQL,
+            params
+        } = construirFiltros(req.query);
+
+        const extraWhere = whereSQL
+            ? `${whereSQL} AND`
+            : `WHERE`;
+
         const [rows] = await pool.query(`
-            SELECT DISTINCT prov_entrega
-            FROM ordenes_electronicas
-            WHERE prov_entrega IS NOT NULL
-            AND prov_entrega <> ''
-            ORDER BY prov_entrega ASC
-        `);
+
+            SELECT DISTINCT
+                oe.prov_entrega
+
+            FROM ordenes_electronicas oe
+
+            ${extraWhere}
+
+            oe.prov_entrega IS NOT NULL
+
+            AND oe.prov_entrega <> ''
+
+            ORDER BY oe.prov_entrega ASC
+
+        `, params);
 
         res.json(rows);
 
     } catch (error) {
+
         console.log(error);
-        res.status(500).json({ message: "ERROR_PROV" });
+
+        res.status(500).json({
+            message: "ERROR_PROV"
+        });
     }
 };
 
 
-
 exports.obtenerDistritos = async (req, res) => {
+
     try {
+
+        const {
+            whereSQL,
+            params
+        } = construirFiltros(req.query);
+
+        const extraWhere = whereSQL
+            ? `${whereSQL} AND`
+            : `WHERE`;
+
         const [rows] = await pool.query(`
-            SELECT DISTINCT dist_entrega
-            FROM ordenes_electronicas
-            WHERE dist_entrega IS NOT NULL
-            AND dist_entrega <> ''
-            ORDER BY dist_entrega ASC
-        `);
+
+            SELECT DISTINCT
+                oe.dist_entrega
+
+            FROM ordenes_electronicas oe
+
+            ${extraWhere}
+
+            oe.dist_entrega IS NOT NULL
+
+            AND oe.dist_entrega <> ''
+
+            ORDER BY oe.dist_entrega ASC
+
+        `, params);
 
         res.json(rows);
 
     } catch (error) {
+
         console.log(error);
-        res.status(500).json({ message: "ERROR_DIST" });
+
+        res.status(500).json({
+            message: "ERROR_DIST"
+        });
     }
 };
 
