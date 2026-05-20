@@ -388,19 +388,21 @@ exports.obtenerDepartamentos = async (req, res) => {
 
     try {
 
+        const filtros = {
+            ...req.query,
+
+            // 🔥 IGNORAR DEP
+            departamento: ""
+        };
+
         const {
             whereSQL,
             params
-        } = construirFiltros(req.query);
-
-        // =========================
-        // WHERE EXTRA
-        // =========================
+        } = construirFiltros(filtros);
 
         const extraWhere = whereSQL
             ? `${whereSQL} AND`
             : `WHERE`;
-
         // =========================
         // QUERY
         // =========================
@@ -441,10 +443,17 @@ exports.obtenerProvincias = async (req, res) => {
 
     try {
 
+        const filtros = {
+            ...req.query,
+
+            // 🔥 NO FILTRARSE A SI MISMO
+            provincia: ""
+        };
+
         const {
             whereSQL,
             params
-        } = construirFiltros(req.query);
+        } = construirFiltros(filtros);
 
         const extraWhere = whereSQL
             ? `${whereSQL} AND`
@@ -484,10 +493,16 @@ exports.obtenerDistritos = async (req, res) => {
 
     try {
 
+        const filtros = {
+            ...req.query,
+
+            distrito: ""
+        };
+
         const {
             whereSQL,
             params
-        } = construirFiltros(req.query);
+        } = construirFiltros(filtros);
 
         const extraWhere = whereSQL
             ? `${whereSQL} AND`
