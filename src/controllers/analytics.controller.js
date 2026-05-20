@@ -454,8 +454,11 @@ exports.obtenerOrdenesDetalle = async (req, res) => {
 
         const [rows] = await pool.query(`
             SELECT
+                
 
                 pi.imagen_url,
+
+                pi.ficha_url,
 
                 oe.categoria,
 
