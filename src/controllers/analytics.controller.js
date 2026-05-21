@@ -27,7 +27,7 @@ const construirFiltros = (query) => {
     // ACUERDO
     // =========================
     if (acuerdo_marco) {
-        where.push(`oe.acuerdo_marco = ?`);
+        where.push(`oe.codigo_acuerdo_marco = ?`);
         params.push(acuerdo_marco);
     }
 
@@ -58,17 +58,50 @@ const construirFiltros = (query) => {
     // =========================
     // PROVEEDOR
     // =========================
+    // =========================
+    // PROVEEDOR
+    // =========================
     if (proveedor) {
-        where.push(`oe.razon_social_proveedor = ?`);
-        params.push(proveedor);
+
+        where.push(`(
+
+            oe.ruc_proveedor LIKE ?
+
+            OR
+
+            oe.razon_social_proveedor LIKE ?
+
+        )`);
+
+        const proveedorBusqueda = proveedor
+            .split(" ")
+            .filter(Boolean)[0];
+
+        params.push(`%${proveedorBusqueda}%`);
+        params.push(`%${proveedorBusqueda}%`);
     }
 
     // =========================
-    // ENTIDAD (NUEVO)
+    // ENTIDAD
     // =========================
     if (entidad) {
-        where.push(`oe.razon_social_entidad = ?`);
-        params.push(entidad);
+
+        where.push(`(
+
+            oe.ruc_entidad LIKE ?
+
+            OR
+
+            oe.razon_social_entidad LIKE ?
+
+        )`);
+
+        const entidadBusqueda = entidad
+            .split(" ")
+            .filter(Boolean)[0];
+
+        params.push(`%${entidadBusqueda}%`);
+        params.push(`%${entidadBusqueda}%`);
     }
 
     // =========================
@@ -192,17 +225,13 @@ exports.proveedoresTotales = async (req, res) => {
 
         const [rows] = await pool.query(`
             SELECT
+                oe.razon_social_proveedor AS proveedor,
 
-                oe.razon_social_proveedor
-                AS proveedor,
+                ROUND(SUM(oe.subtotal), 2) AS subtotal,
 
-                ROUND(
-                    SUM(oe.subtotal),
-                    2
-                ) AS subtotal,
+                COUNT(*) AS partes,   -- 🔥 cada fila = 1 parte
 
-                COUNT(DISTINCT oe.orden_electronica)
-                AS ordenes
+                COUNT(DISTINCT oe.orden_electronica) AS ocams
 
             FROM ordenes_electronicas oe
 
@@ -212,7 +241,7 @@ exports.proveedoresTotales = async (req, res) => {
 
             ORDER BY subtotal DESC
 
-            LIMIT 100
+            LIMIT 100;
         `, params);
 
         res.json(rows);
@@ -236,16 +265,15 @@ exports.obtenerAcuerdos = async (req, res) => {
     try {
 
         const [rows] = await pool.query(`
-            SELECT DISTINCT acuerdo_marco
+            SELECT DISTINCT codigo_acuerdo_marco
 
             FROM ordenes_electronicas
 
-            WHERE acuerdo_marco IS NOT NULL
-            AND acuerdo_marco <> ''
+            WHERE codigo_acuerdo_marco IS NOT NULL
+            AND codigo_acuerdo_marco <> ''
 
-            ORDER BY acuerdo_marco ASC
+            ORDER BY codigo_acuerdo_marco ASC
         `);
-
         res.json(rows);
 
     } catch (error) {
@@ -327,42 +355,95 @@ exports.obtenerMeses = async (req, res) => {
 
 
 exports.obtenerEntidades = async (req, res) => {
+
     try {
+
+        const search = req.query.search || "";
+
         const [rows] = await pool.query(`
-            SELECT DISTINCT razon_social_entidad
+
+            SELECT DISTINCT
+
+                ruc_entidad,
+
+                razon_social_entidad
+
             FROM ordenes_electronicas
-            WHERE razon_social_entidad IS NOT NULL
+
+            WHERE (
+                ruc_entidad LIKE ?
+                OR razon_social_entidad LIKE ?
+            )
+
+            AND razon_social_entidad IS NOT NULL
             AND razon_social_entidad <> ''
+
             ORDER BY razon_social_entidad ASC
-        `);
+
+            LIMIT 50
+
+        `, [
+            `%${search}%`,
+            `%${search}%`
+        ]);
 
         res.json(rows);
 
     } catch (error) {
+
         console.log(error);
-        res.status(500).json({ message: "ERROR_ENTIDADES" });
+
+        res.status(500).json({
+            message: "ERROR_ENTIDADES"
+        });
     }
 };
 
 
 exports.obtenerListaProveedores = async (req, res) => {
+
     try {
+
+        const search = req.query.search || "";
+
         const [rows] = await pool.query(`
-            SELECT DISTINCT razon_social_proveedor
+
+            SELECT DISTINCT
+
+                ruc_proveedor,
+
+                razon_social_proveedor
+
             FROM ordenes_electronicas
-            WHERE razon_social_proveedor IS NOT NULL
+
+            WHERE (
+                ruc_proveedor LIKE ?
+                OR razon_social_proveedor LIKE ?
+            )
+
+            AND razon_social_proveedor IS NOT NULL
             AND razon_social_proveedor <> ''
+
             ORDER BY razon_social_proveedor ASC
-        `);
+
+            LIMIT 50
+
+        `, [
+            `%${search}%`,
+            `%${search}%`
+        ]);
 
         res.json(rows);
 
     } catch (error) {
+
         console.log(error);
-        res.status(500).json({ message: "ERROR_PROVEEDORES_LISTA" });
+
+        res.status(500).json({
+            message: "ERROR_PROVEEDORES_LISTA"
+        });
     }
 };
-
 
 exports.obtenerCategorias = async (req, res) => {
     try {
@@ -552,6 +633,9 @@ exports.obtenerOrdenesDetalle = async (req, res) => {
                 pi.imagen_url,
 
                 pi.ficha_url,
+
+
+                oe.orden_electronica AS ocam,   -- 🔥 AÑADIR ESTO
 
                 oe.categoria,
 
