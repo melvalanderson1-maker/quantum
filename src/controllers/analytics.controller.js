@@ -63,22 +63,34 @@ const construirFiltros = (query) => {
     // =========================
     if (proveedor) {
 
-        where.push(`(
+        const lista = proveedor
+            .split(",")
+            .map(p => p.trim())
+            .filter(Boolean);
 
+        const condiciones = lista.map(() => `(
             oe.ruc_proveedor LIKE ?
+            OR oe.razon_social_proveedor LIKE ?
+        )`).join(" OR ");
 
-            OR
+        where.push(`(${condiciones})`);
 
-            oe.razon_social_proveedor LIKE ?
+        lista.forEach(p => {
 
-        )`);
+            const clean = p.trim();
 
-        const proveedorBusqueda = proveedor
-            .split(" ")
-            .filter(Boolean)[0];
+            // detecta si es RUC (numérico)
+            const isRuc = /^\d+$/.test(clean);
 
-        params.push(`%${proveedorBusqueda}%`);
-        params.push(`%${proveedorBusqueda}%`);
+            if (isRuc) {
+                params.push(`%${clean}%`);
+                params.push(`%${clean}%`);
+            } else {
+                // fallback por si llega texto raro
+                params.push(`%${clean}%`);
+                params.push(`%${clean}%`);
+            }
+        });
     }
 
     // =========================
@@ -108,10 +120,18 @@ const construirFiltros = (query) => {
     // CATEGORIA (NUEVO)
     // =========================
     if (categoria) {
-        where.push(`oe.categoria = ?`);
-        params.push(categoria);
-    }
 
+        const lista = categoria
+            .split(",")
+            .map(c => c.trim())
+            .filter(Boolean);
+
+        const placeholders = lista.map(() => "?").join(",");
+
+        where.push(`oe.categoria IN (${placeholders})`);
+
+        params.push(...lista);
+    }
     // =========================
     // DEPARTAMENTO (NUEVO)
     // =========================
