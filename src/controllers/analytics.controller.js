@@ -170,19 +170,54 @@ if (anios.length > 0) {
     // =========================
     // ENTIDAD (FIX EXACTO)
     // =========================
-    if (entidad) {
+// =========================
+// ENTIDAD
+// =========================
+if (entidad) {
 
-        const lista = entidad
-            .split(",")
-            .map(e => e.trim())
-            .filter(Boolean);
+    const rucs = entidad
+        .split(",")
+        .map(e => e.trim())
+        .filter(Boolean);
 
-        where.push(`
-            oe.ruc_entidad IN (${lista.map(() => "?").join(",")})
-        `);
+    const razones = query.entidad_razon
+        ? String(query.entidad_razon)
+            .split("|||")
+            .map(r => r.trim())
+            .filter(Boolean)
+        : [];
 
-        params.push(...lista);
-    }
+    const condiciones = [];
+
+    rucs.forEach((ruc, index) => {
+
+        const razon = razones[index];
+
+        if (razon) {
+
+            condiciones.push(`
+                (
+                    oe.ruc_entidad = ?
+                    AND oe.razon_social_entidad = ?
+                )
+            `);
+
+            params.push(ruc, razon);
+
+        } else {
+
+            condiciones.push(`
+                oe.ruc_entidad = ?
+            `);
+
+            params.push(ruc);
+        }
+    });
+
+    where.push(`
+        (${condiciones.join(" OR ")})
+    `);
+}
 
     // =========================
     // CATEGORIA (NUEVO)
