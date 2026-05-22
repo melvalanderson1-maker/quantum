@@ -20,6 +20,24 @@ const construirFiltros = (query) => {
         nro_parte
     } = query;
 
+
+
+    // =========================
+    // NORMALIZAR ARRAYS
+    // =========================
+
+    const anios = Array.isArray(anio)
+        ? anio
+        : anio
+            ? String(anio).split(",")
+            : [];
+
+    const meses = Array.isArray(mes)
+        ? mes
+        : mes
+            ? String(mes).split(",")
+            : [];
+
     let where = [];
     let params = [];
 
@@ -34,27 +52,73 @@ const construirFiltros = (query) => {
     // =========================
     // AÑO
     // =========================
-    if (anio) {
-        where.push(`YEAR(oe.fecha_aceptacion) = ?`);
-        params.push(anio);
+    // =========================
+    // FECHA OPTIMIZADA
+    // =========================
+
+// =========================
+// AÑO
+// =========================
+// =========================
+// FECHA OPTIMIZADA
+// =========================
+
+if (anios.length > 0) {
+
+    const anioMin = Math.min(...anios.map(Number));
+    const anioMax = Math.max(...anios.map(Number));
+
+    // =====================================
+    // SI VIENEN MESES
+    // =====================================
+
+    if (meses.length > 0) {
+
+        const mesMin = Math.min(...meses.map(Number));
+        const mesMax = Math.max(...meses.map(Number));
+
+        const fechaInicio =
+            `${anioMin}-${String(mesMin).padStart(2, "0")}-01`;
+
+        // siguiente mes
+        let nextMonth = mesMax + 1;
+        let nextYear = anioMax;
+
+        if (nextMonth === 13) {
+            nextMonth = 1;
+            nextYear++;
+        }
+
+        const fechaFin =
+            `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+
+        where.push(`
+            oe.fecha_aceptacion >= ?
+            AND oe.fecha_aceptacion < ?
+        `);
+
+        params.push(fechaInicio, fechaFin);
+
     }
 
-    // =========================
-    // MES
-    // =========================
-    if (mes) {
-        where.push(`MONTH(oe.fecha_aceptacion) = ?`);
-        params.push(mes);
-    }
+    // =====================================
+    // SOLO AÑO
+    // =====================================
 
-    // =========================
-    // DIA
-    // =========================
-    if (dia) {
-        where.push(`DAY(oe.fecha_aceptacion) = ?`);
-        params.push(dia);
-    }
+    else {
 
+        where.push(`
+            oe.fecha_aceptacion >= ?
+            AND oe.fecha_aceptacion < ?
+        `);
+
+        params.push(
+            `${anioMin}-01-01`,
+            `${anioMax + 1}-01-01`
+        );
+    }
+}
+    
     // =========================
     // PROVEEDOR
     // =========================
@@ -68,70 +132,94 @@ const construirFiltros = (query) => {
             .map(p => p.trim())
             .filter(Boolean);
 
-        const condiciones = lista.map(() => `(
-            oe.ruc_proveedor LIKE ?
-            OR oe.razon_social_proveedor LIKE ?
-        )`).join(" OR ");
-
-        where.push(`(${condiciones})`);
+        const condiciones = [];
 
         lista.forEach(p => {
 
             const clean = p.trim();
 
-            // detecta si es RUC (numérico)
-            const isRuc = /^\d+$/.test(clean);
+            const isRuc = clean.length <= 11 && /^\d+$/.test(clean);
 
+            // 🔥 SI ES RUC
             if (isRuc) {
-                params.push(`%${clean}%`);
-                params.push(`%${clean}%`);
+
+                condiciones.push(`
+                    oe.ruc_proveedor LIKE ?
+                `);
+
+                params.push(`${clean}%`);
+
             } else {
-                // fallback por si llega texto raro
-                params.push(`%${clean}%`);
-                params.push(`%${clean}%`);
+
+                // 🔥 FULLTEXT
+                condiciones.push(`
+                    MATCH(oe.razon_social_proveedor)
+                    AGAINST(? IN BOOLEAN MODE)
+                `);
+
+                params.push(`${clean}*`);
             }
         });
+
+        where.push(`(${condiciones.join(" OR ")})`);
     }
 
     // =========================
     // ENTIDAD
     // =========================
+    // =========================
+    // ENTIDAD (FIX EXACTO)
+    // =========================
     if (entidad) {
 
-        where.push(`(
+        const lista = entidad
+            .split(",")
+            .map(e => e.trim())
+            .filter(Boolean);
 
-            oe.ruc_entidad LIKE ?
+        where.push(`
+            oe.ruc_entidad IN (${lista.map(() => "?").join(",")})
+        `);
 
-            OR
-
-            oe.razon_social_entidad LIKE ?
-
-        )`);
-
-        const entidadBusqueda = entidad
-            .split(" ")
-            .filter(Boolean)[0];
-
-        params.push(`%${entidadBusqueda}%`);
-        params.push(`%${entidadBusqueda}%`);
+        params.push(...lista);
     }
 
     // =========================
     // CATEGORIA (NUEVO)
     // =========================
-    if (categoria) {
+// =========================
+// CATEGORIA (FIX ROBUSTO)
+// =========================
+// =========================
+// CATEGORIA (FIX REAL)
+// =========================
+// =========================
+// CATEGORIA (MULTISELECT CORRECTO)
+// =========================
+if (categoria) {
 
-        const lista = categoria
-            .split(",")
-            .map(c => c.trim())
-            .filter(Boolean);
+    const lista = categoria
+    .split(",")
+    .map(p => p.trim())
+    .filter(Boolean);
 
-        const placeholders = lista.map(() => "?").join(",");
+        const condiciones = [];
 
-        where.push(`oe.categoria IN (${placeholders})`);
 
-        params.push(...lista);
+
+    const clean = lista
+        .map(v => v.trim())
+        .filter(Boolean);
+
+    if (clean.length > 0) {
+
+        where.push(`
+            oe.categoria IN (${clean.map(() => "?").join(",")})
+        `);
+
+        params.push(...clean);
     }
+}
     // =========================
     // DEPARTAMENTO (NUEVO)
     // =========================
@@ -168,9 +256,11 @@ const construirFiltros = (query) => {
             .replace(/-/g, "")
             .toUpperCase();
 
-        where.push(`oe.nro_parte_clean = ?`);
+        where.push(`
+            oe.nro_parte_clean LIKE ?
+        `);
 
-        params.push(nroParteLimpio);
+        params.push(`%${nroParteLimpio}%`);
     }
 
     const whereSQL =
@@ -238,6 +328,8 @@ exports.proveedoresTotales = async (req, res) => {
 
     try {
 
+        
+
         const {
             whereSQL,
             params
@@ -245,19 +337,24 @@ exports.proveedoresTotales = async (req, res) => {
 
         const [rows] = await pool.query(`
             SELECT
-                oe.razon_social_proveedor AS proveedor,
+
+                oe.ruc_proveedor,
+
+                MAX(oe.razon_social_proveedor) AS proveedor,
 
                 ROUND(SUM(oe.subtotal), 2) AS subtotal,
 
-                COUNT(*) AS partes,   -- 🔥 cada fila = 1 parte
+                COUNT(*) AS partes,
 
                 COUNT(DISTINCT oe.orden_electronica) AS ocams
 
             FROM ordenes_electronicas oe
 
+            FORCE INDEX (idx_dashboard_ultra)
+
             ${whereSQL}
 
-            GROUP BY oe.razon_social_proveedor
+            GROUP BY oe.ruc_proveedor
 
             ORDER BY subtotal DESC
 
@@ -378,34 +475,102 @@ exports.obtenerEntidades = async (req, res) => {
 
     try {
 
-        const search = req.query.search || "";
+        const search = (req.query.search || "").trim();
 
-        const [rows] = await pool.query(`
-
-            SELECT DISTINCT
+        let sql = `
+            SELECT
 
                 ruc_entidad,
-
                 razon_social_entidad
 
             FROM ordenes_electronicas
 
-            WHERE (
-                ruc_entidad LIKE ?
-                OR razon_social_entidad LIKE ?
-            )
+       
 
-            AND razon_social_entidad IS NOT NULL
-            AND razon_social_entidad <> ''
+            WHERE
+        `;
+
+        let params = [];
+
+        // ======================================
+        // SI SEARCH VIENE VACIO
+        // ======================================
+
+        if (!search) {
+
+            sql += `
+                razon_social_entidad IS NOT NULL
+                AND razon_social_entidad <> ''
+            `;
+
+        }
+
+        // ======================================
+        // SI ES RUC
+        // ======================================
+
+        else if (/^\d+$/.test(search)) {
+
+            sql += `
+                ruc_entidad LIKE ?
+            `;
+
+            const booleanSearch = search
+                .split(" ")
+                .filter(Boolean)
+                .map(word => `+${word}*`)
+                .join(" ");
+
+            params.push(booleanSearch);
+
+        }
+
+        // ======================================
+        // FULLTEXT
+        // ======================================
+
+        else {
+
+            const words = search
+                .split(/\s+/)
+                .filter(Boolean);
+
+            const matchQuery = words
+                .map(w => `+${w}*`)
+                .join(" ");
+
+            const likeConditions = words.map(() =>
+                `razon_social_entidad LIKE ?`
+            );
+
+            sql += `
+                (
+                    MATCH(razon_social_entidad)
+                    AGAINST(? IN BOOLEAN MODE)
+                    OR
+                    (${likeConditions.join(" AND ")})
+                )
+            `;
+
+            params.push(matchQuery);
+
+            words.forEach(w => {
+                params.push(`%${w}%`);
+            });
+        }
+
+        sql += `
+
+            GROUP BY
+                ruc_entidad,
+                razon_social_entidad
 
             ORDER BY razon_social_entidad ASC
 
             LIMIT 50
+        `;
 
-        `, [
-            `%${search}%`,
-            `%${search}%`
-        ]);
+        const [rows] = await pool.query(sql, params);
 
         res.json(rows);
 
@@ -424,34 +589,105 @@ exports.obtenerListaProveedores = async (req, res) => {
 
     try {
 
-        const search = req.query.search || "";
+        const search = (req.query.search || "").trim();
 
-        const [rows] = await pool.query(`
+        const isRuc = /^\d+$/.test(search);
 
-            SELECT DISTINCT
+        let where = [];
+        let params = [];
+
+        // =========================
+        // VACIO
+        // =========================
+
+        if (!search) {
+
+            where.push(`
+                razon_social_proveedor IS NOT NULL
+                AND razon_social_proveedor <> ''
+            `);
+
+        }
+
+        // =========================
+        // RUC
+        // =========================
+        else if (isRuc) {
+
+            where.push(`
+                ruc_proveedor LIKE ?
+            `);
+
+            params.push(`${search}%`);
+
+        }
+
+        // =========================
+        // FULLTEXT
+        // =========================
+
+        else {
+
+            // =========================
+            // SMART SEARCH (CORRECTO)
+            // =========================
+
+            const words = search
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+
+            const likeConditions = [];
+
+            words.forEach(word => {
+
+                likeConditions.push(`
+                    razon_social_proveedor LIKE ?
+                `);
+
+                params.push(`%${word}%`);
+            });
+
+            where.push(`
+                (
+                    ${likeConditions.join(" AND ")}
+                )
+            `);
+        }
+        params.push(search);
+        params.push(search);
+        params.push(search);
+
+
+
+        const sql = `
+
+            SELECT
 
                 ruc_proveedor,
-
                 razon_social_proveedor
 
             FROM ordenes_electronicas
 
-            WHERE (
-                ruc_proveedor LIKE ?
-                OR razon_social_proveedor LIKE ?
-            )
+            WHERE ${where.join(" AND ")}
 
-            AND razon_social_proveedor IS NOT NULL
-            AND razon_social_proveedor <> ''
+            GROUP BY
+                ruc_proveedor,
+                razon_social_proveedor
 
-            ORDER BY razon_social_proveedor ASC
+            ORDER BY
+                CASE
+                    WHEN razon_social_proveedor LIKE CONCAT(?, '%') THEN 0
+                    WHEN razon_social_proveedor LIKE CONCAT('%', ?, '%') THEN 1
+                    WHEN ruc_proveedor LIKE CONCAT(?, '%') THEN 2
+                    ELSE 3
+                END,
+                LENGTH(razon_social_proveedor) ASC
 
             LIMIT 50
+        `;
 
-        `, [
-            `%${search}%`,
-            `%${search}%`
-        ]);
+        const [rows] = await pool.query(sql, params);
 
         res.json(rows);
 
@@ -468,10 +704,15 @@ exports.obtenerListaProveedores = async (req, res) => {
 exports.obtenerCategorias = async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT DISTINCT categoria
+            SELECT categoria
+
             FROM ordenes_electronicas
+
             WHERE categoria IS NOT NULL
             AND categoria <> ''
+
+            GROUP BY categoria
+
             ORDER BY categoria ASC
         `);
 
@@ -639,8 +880,122 @@ exports.obtenerDistritos = async (req, res) => {
 };
 
 
+exports.obtenerFiltrosDinamicos = async (req, res) => {
+
+    try {
+
+        const {
+            whereSQL,
+            params
+        } = construirFiltros(req.query);
+
+        // 🔥 SI YA EXISTE WHERE -> usar AND
+        // 🔥 SI NO EXISTE -> crear WHERE
+        const extraWhere = whereSQL
+            ? `${whereSQL} AND`
+            : `WHERE`;
+
+        const [
+            categorias,
+            departamentos,
+            provincias,
+            distritos
+        ] = await Promise.all([
+
+            pool.query(`
+                SELECT categoria
+
+                FROM ordenes_electronicas oe
+
+                ${extraWhere}
+
+                categoria IS NOT NULL
+                AND categoria <> ''
+
+                GROUP BY categoria
+
+                ORDER BY categoria ASC
+            `, params),
+
+            pool.query(`
+                SELECT dep_entrega
+
+                FROM ordenes_electronicas oe
+
+                ${extraWhere}
+
+                dep_entrega IS NOT NULL
+                AND dep_entrega <> ''
+
+                GROUP BY dep_entrega
+
+                ORDER BY dep_entrega ASC
+            `, params),
+
+            pool.query(`
+                SELECT prov_entrega
+
+                FROM ordenes_electronicas oe
+
+                ${extraWhere}
+
+                prov_entrega IS NOT NULL
+                AND prov_entrega <> ''
+
+                GROUP BY prov_entrega
+
+                ORDER BY prov_entrega ASC
+            `, params),
+
+            pool.query(`
+                SELECT dist_entrega
+
+                FROM ordenes_electronicas oe
+
+                ${extraWhere}
+
+                dist_entrega IS NOT NULL
+                AND dist_entrega <> ''
+
+                GROUP BY dist_entrega
+
+                ORDER BY dist_entrega ASC
+            `, params)
+
+        ]);
+
+        res.json({
+
+            categorias: categorias[0],
+
+            departamentos: departamentos[0],
+
+            provincias: provincias[0],
+
+            distritos: distritos[0]
+
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            message: "ERROR_FILTROS_DINAMICOS"
+        });
+    }
+};
+
+
 
 exports.obtenerOrdenesDetalle = async (req, res) => {
+
+
+    const page = Number(req.query.page || 1);
+
+    const limit = 50;
+
+    const offset = (page - 1) * limit;
 
     try {
 
@@ -683,8 +1038,8 @@ exports.obtenerOrdenesDetalle = async (req, res) => {
 
             ${whereSQL}
             ORDER BY oe.fecha_aceptacion DESC
-            LIMIT 500
-        `, params);
+            LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
 
         res.json(rows);
 
@@ -715,7 +1070,7 @@ exports.entidadesTotales = async (req, res) => {
 
             ${whereSQL}
 
-            GROUP BY oe.razon_social_entidad
+            GROUP BY oe.ruc_entidad, oe.razon_social_entidad
 
             ORDER BY subtotal DESC
 

@@ -6,12 +6,16 @@ const authRoutes = require("./src/routes/auth.routes");
 const productoRoutes = require("./src/routes/producto.routes");
 const clientesRoutes = require("./src/routes/clientes.routes");
 const usuariosRoutes = require("./src/routes/usuarios.routes");
-
+const compression = require("compression");
 const analyticsRoutes = require("./src/routes/analytics.routes");
 
 const app = express();
 
+
+app.use(compression());
 const helmet = require("helmet");
+
+
 
 
 

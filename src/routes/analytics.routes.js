@@ -73,4 +73,10 @@ router.get(
     controller.buscarNroParte
 );
 
+
+router.get(
+    "/filtros-dinamicos",
+    controller.obtenerFiltrosDinamicos
+);
+
 module.exports = router;
