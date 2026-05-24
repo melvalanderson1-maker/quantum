@@ -285,19 +285,18 @@ if (categoria) {
 
     if (nro_parte) {
 
-        const nroParteLimpio = nro_parte
-            .trim()
-            .replace(/\s+/g, "")
-            .replace(/-/g, "")
-            .toUpperCase();
+            const nroParteLimpio = nro_parte
+                .trim()
+                .replace(/\s+/g, "")
+                .replace(/[-–—]/g, "")  // guión normal, guión largo, guión em
+                .toUpperCase();
 
-        where.push(`
-            oe.nro_parte_clean LIKE ?
-        `);
+            where.push(`
+                oe.nro_parte_clean LIKE ?
+            `);
 
-        params.push(`%${nroParteLimpio}%`);
-    }
-
+            params.push(`%${nroParteLimpio}%`);
+        }
     const whereSQL =
         where.length > 0
             ? `WHERE ${where.join(" AND ")}`
@@ -309,105 +308,96 @@ if (categoria) {
 // ======================================================
 // RESUMEN
 // ======================================================
-
 exports.obtenerResumen = async (req, res) => {
-
     try {
+        const { whereSQL, params } = construirFiltros(req.query);
+        const anio = req.query.anio ? String(req.query.anio).split(",") : [];
+        const soloUnAnio = anio.length === 1 && !req.query.mes &&
+            !req.query.acuerdo_marco && !req.query.entidad &&
+            !req.query.proveedor && !req.query.categoria &&
+            !req.query.departamento && !req.query.nro_parte;
 
-        const {
-            whereSQL,
-            params
-        } = construirFiltros(req.query);
+        if (!whereSQL) {
+            const [rows] = await pool.query(`SELECT * FROM resumen_general LIMIT 1`);
+            return res.json(rows[0]);
+        }
+
+        if (soloUnAnio) {
+            const [rows] = await pool.query(`
+                SELECT registros, ordenes, ventas, entidades, marcas
+                FROM resumen_general_anio
+                WHERE anio = ?
+            `, [Number(anio[0])]);
+            return res.json(rows[0]);
+        }
 
         const [rows] = await pool.query(`
-            SELECT
-
-                COUNT(*) AS registros,
-
-                COUNT(DISTINCT orden_electronica)
-                AS ordenes,
-
-                ROUND(
-                    SUM(subtotal),
-                    2
-                ) AS ventas,
-
-                COUNT(DISTINCT ruc_entidad)
-                AS entidades,
-
-                COUNT(DISTINCT marca_ficha_producto)
-                AS marcas
-
+            SELECT COUNT(*) AS registros,
+                COUNT(DISTINCT orden_electronica) AS ordenes,
+                ROUND(SUM(subtotal), 2) AS ventas,
+                COUNT(DISTINCT ruc_entidad) AS entidades,
+                COUNT(DISTINCT marca_ficha_producto) AS marcas
             FROM ordenes_electronicas oe
-
             ${whereSQL}
         `, params);
-
         res.json(rows[0]);
 
     } catch (error) {
-
         console.log(error);
-
-        res.status(500).json({
-            message: "ERROR_RESUMEN"
-        });
+        res.status(500).json({ message: "ERROR_RESUMEN" });
     }
 };
 
 // ======================================================
 // PROVEEDORES + SUBTOTAL
 // ======================================================
-
 exports.proveedoresTotales = async (req, res) => {
-
     try {
+        const { whereSQL, params } = construirFiltros(req.query);
+        const anio = req.query.anio ? String(req.query.anio).split(",") : [];
+        const soloUnAnio = anio.length === 1 && !req.query.mes &&
+            !req.query.acuerdo_marco && !req.query.entidad &&
+            !req.query.proveedor && !req.query.categoria &&
+            !req.query.departamento && !req.query.nro_parte;
 
-        
+        if (!whereSQL) {
+            const [rows] = await pool.query(`
+                SELECT ruc_proveedor, proveedor, subtotal, partes, ocams
+                FROM resumen_proveedores
+                ORDER BY subtotal DESC LIMIT 100
+            `);
+            return res.json(rows);
+        }
 
-        const {
-            whereSQL,
-            params
-        } = construirFiltros(req.query);
+        if (soloUnAnio) {
+            const [rows] = await pool.query(`
+                SELECT ruc_proveedor, proveedor, subtotal, partes, ocams
+                FROM resumen_proveedores_anio
+                WHERE anio = ?
+                ORDER BY subtotal DESC LIMIT 100
+            `, [Number(anio[0])]);
+            return res.json(rows);
+        }
 
         const [rows] = await pool.query(`
-            SELECT
-
-                oe.ruc_proveedor,
-
+            SELECT oe.ruc_proveedor,
                 MAX(oe.razon_social_proveedor) AS proveedor,
-
                 ROUND(SUM(oe.subtotal), 2) AS subtotal,
-
                 COUNT(*) AS partes,
-
                 COUNT(DISTINCT oe.orden_electronica) AS ocams
-
             FROM ordenes_electronicas oe
-
-            FORCE INDEX (idx_dashboard_ultra)
-
+            FORCE INDEX (idx_cov_proveedor)
             ${whereSQL}
-
             GROUP BY oe.ruc_proveedor
-
-            ORDER BY subtotal DESC
-
-            LIMIT 100;
+            ORDER BY subtotal DESC LIMIT 100
         `, params);
-
         res.json(rows);
 
     } catch (error) {
-
         console.log(error);
-
-        res.status(500).json({
-            message: "ERROR_PROVEEDORES"
-        });
+        res.status(500).json({ message: "ERROR_PROVEEDORES" });
     }
 };
-
 // ======================================================
 // ACUERDOS
 // ======================================================
@@ -913,114 +903,54 @@ exports.obtenerDistritos = async (req, res) => {
         });
     }
 };
-
-
 exports.obtenerFiltrosDinamicos = async (req, res) => {
-
     try {
+        const { whereSQL, params } = construirFiltros(req.query);
+        const anio = req.query.anio ? String(req.query.anio).split(",") : [];
+        const soloUnAnio = anio.length === 1 && !req.query.mes &&
+            !req.query.acuerdo_marco && !req.query.entidad &&
+            !req.query.proveedor && !req.query.categoria &&
+            !req.query.departamento && !req.query.nro_parte;
 
-        const {
-            whereSQL,
-            params
-        } = construirFiltros(req.query);
+        let rows;
 
-        // 🔥 SI YA EXISTE WHERE -> usar AND
-        // 🔥 SI NO EXISTE -> crear WHERE
-        const extraWhere = whereSQL
-            ? `${whereSQL} AND`
-            : `WHERE`;
-
-        const [
-            categorias,
-            departamentos,
-            provincias,
-            distritos
-        ] = await Promise.all([
-
-            pool.query(`
-                SELECT categoria
-
+        if (!whereSQL) {
+            [rows] = await pool.query(`
+                SELECT categoria, dep_entrega, prov_entrega, dist_entrega
+                FROM resumen_filtros
+            `);
+        } else if (soloUnAnio) {
+            [rows] = await pool.query(`
+                SELECT categoria, dep_entrega, prov_entrega, dist_entrega
+                FROM resumen_filtros_anio
+                WHERE anio = ?
+            `, [Number(anio[0])]);
+        } else {
+            [rows] = await pool.query(`
+                SELECT categoria, dep_entrega, prov_entrega, dist_entrega
                 FROM ordenes_electronicas oe
+                ${whereSQL}
+                GROUP BY categoria, dep_entrega, prov_entrega, dist_entrega
+            `, params);
+        }
 
-                ${extraWhere}
-
-                categoria IS NOT NULL
-                AND categoria <> ''
-
-                GROUP BY categoria
-
-                ORDER BY categoria ASC
-            `, params),
-
-            pool.query(`
-                SELECT dep_entrega
-
-                FROM ordenes_electronicas oe
-
-                ${extraWhere}
-
-                dep_entrega IS NOT NULL
-                AND dep_entrega <> ''
-
-                GROUP BY dep_entrega
-
-                ORDER BY dep_entrega ASC
-            `, params),
-
-            pool.query(`
-                SELECT prov_entrega
-
-                FROM ordenes_electronicas oe
-
-                ${extraWhere}
-
-                prov_entrega IS NOT NULL
-                AND prov_entrega <> ''
-
-                GROUP BY prov_entrega
-
-                ORDER BY prov_entrega ASC
-            `, params),
-
-            pool.query(`
-                SELECT dist_entrega
-
-                FROM ordenes_electronicas oe
-
-                ${extraWhere}
-
-                dist_entrega IS NOT NULL
-                AND dist_entrega <> ''
-
-                GROUP BY dist_entrega
-
-                ORDER BY dist_entrega ASC
-            `, params)
-
-        ]);
+        const categorias    = [...new Set(rows.map(r => r.categoria).filter(Boolean))].sort();
+        const departamentos = [...new Set(rows.map(r => r.dep_entrega).filter(Boolean))].sort();
+        const provincias    = [...new Set(rows.map(r => r.prov_entrega).filter(Boolean))].sort();
+        const distritos     = [...new Set(rows.map(r => r.dist_entrega).filter(Boolean))].sort();
 
         res.json({
-
-            categorias: categorias[0],
-
-            departamentos: departamentos[0],
-
-            provincias: provincias[0],
-
-            distritos: distritos[0]
-
+            categorias:    categorias.map(v => ({ categoria:    v })),
+            departamentos: departamentos.map(v => ({ dep_entrega:  v })),
+            provincias:    provincias.map(v => ({ prov_entrega: v })),
+            distritos:     distritos.map(v => ({ dist_entrega: v }))
         });
 
     } catch (error) {
-
         console.log(error);
-
-        res.status(500).json({
-            message: "ERROR_FILTROS_DINAMICOS"
-        });
+        res.status(500).json({ message: "ERROR_FILTROS_DINAMICOS" });
     }
 };
-
 
 
 exports.obtenerOrdenesDetalle = async (req, res) => {
@@ -1068,6 +998,8 @@ exports.obtenerOrdenesDetalle = async (req, res) => {
                 oe.informe_sustento
             FROM ordenes_electronicas oe
 
+            FORCE INDEX (idx_cov_detalle)
+
             LEFT JOIN productos_imagenes pi
             ON oe.nro_parte_clean = pi.nro_parte_clean
 
@@ -1085,33 +1017,44 @@ exports.obtenerOrdenesDetalle = async (req, res) => {
 };
 
 
-
 exports.entidadesTotales = async (req, res) => {
-
     try {
-
         const { whereSQL, params } = construirFiltros(req.query);
+        const anio = req.query.anio ? String(req.query.anio).split(",") : [];
+        const soloUnAnio = anio.length === 1 && !req.query.mes &&
+            !req.query.acuerdo_marco && !req.query.entidad &&
+            !req.query.proveedor && !req.query.categoria &&
+            !req.query.departamento && !req.query.nro_parte;
+
+        if (!whereSQL) {
+            const [rows] = await pool.query(`
+                SELECT entidad, subtotal, ordenes
+                FROM resumen_entidades
+                ORDER BY subtotal DESC LIMIT 100
+            `);
+            return res.json(rows);
+        }
+
+        if (soloUnAnio) {
+            const [rows] = await pool.query(`
+                SELECT entidad, subtotal, ordenes
+                FROM resumen_entidades_anio
+                WHERE anio = ?
+                ORDER BY subtotal DESC LIMIT 100
+            `, [Number(anio[0])]);
+            return res.json(rows);
+        }
 
         const [rows] = await pool.query(`
-            SELECT
-
-                oe.razon_social_entidad AS entidad,
-
+            SELECT oe.razon_social_entidad AS entidad,
                 ROUND(SUM(oe.subtotal), 2) AS subtotal,
-
                 COUNT(DISTINCT oe.orden_electronica) AS ordenes
-
             FROM ordenes_electronicas oe
-
+            FORCE INDEX (idx_cov_entidad)
             ${whereSQL}
-
             GROUP BY oe.ruc_entidad, oe.razon_social_entidad
-
-            ORDER BY subtotal DESC
-
-            LIMIT 100
+            ORDER BY subtotal DESC LIMIT 100
         `, params);
-
         res.json(rows);
 
     } catch (error) {
@@ -1119,7 +1062,6 @@ exports.entidadesTotales = async (req, res) => {
         res.status(500).json({ message: "ERROR_ENTIDADES_TOTALES" });
     }
 };
-
 
 
 

@@ -76,6 +76,7 @@ router.get(
 
 router.get(
     "/filtros-dinamicos",
+    auth,
     controller.obtenerFiltrosDinamicos
 );
 
