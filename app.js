@@ -34,7 +34,7 @@ app.use(cors({
     origin: [
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://fygradev.gruecolimp.com"
+        "https://quantum.gruecolimp.com"
     ],
     credentials: true
 }));
