@@ -58,8 +58,16 @@ const construirFiltros = (query) => {
     // ACUERDO
     // =========================
     if (acuerdo_marco) {
-        where.push(`oe.codigo_acuerdo_marco = ?`);
-        params.push(acuerdo_marco);
+        const lista = String(acuerdo_marco).split("|||").map(a => a.trim()).filter(Boolean);
+        console.log("LISTA ACUERDOS:", lista);
+        console.log("CANTIDAD:", lista.length);
+        if (lista.length === 1) {
+            where.push(`oe.codigo_acuerdo_marco = ?`);
+            params.push(lista[0]);
+        } else {
+            where.push(`oe.codigo_acuerdo_marco IN (${lista.map(() => "?").join(",")})`);
+            params.push(...lista);
+        }
     }
 
     // =========================
@@ -301,14 +309,14 @@ if (categoria) {
             const nroParteLimpio = nro_parte
                 .trim()
                 .replace(/\s+/g, "")
-                .replace(/[-–—]/g, "")  // guión normal, guión largo, guión em
+                .replace(/[-–—_./\\]/g, "")
                 .toUpperCase();
 
-            where.push(`
-                oe.nro_parte_clean LIKE ?
-            `);
 
-            params.push(`%${nroParteLimpio}%`);
+            
+
+            where.push(`oe.nro_parte_clean = ?`);
+            params.push(nroParteLimpio);
         }
     const whereSQL =
         where.length > 0
@@ -324,6 +332,9 @@ if (categoria) {
 exports.obtenerResumen = async (req, res) => {
     try {
         const { whereSQL, params } = construirFiltros(req.query);
+        console.log("ACUERDO RECIBIDO:", req.query.acuerdo_marco);
+        console.log("WHERE GENERADO:", whereSQL);
+        console.log("PARAMS:", params);
         const anio = req.query.anio ? String(req.query.anio).split(",") : [];
         const soloUnAnio = anio.length === 1 && !req.query.mes &&
             !req.query.acuerdo_marco && !req.query.entidad &&
@@ -344,8 +355,47 @@ exports.obtenerResumen = async (req, res) => {
             return res.json(rows[0]);
         }
 
-        const idxResumen = req.query.entidad ? "idx_ruc_entidad_fecha"
-            : req.query.acuerdo_marco ? "idx_acuerdo_marco"
+        const acuerdos = req.query.acuerdo_marco
+            ? String(req.query.acuerdo_marco).split("|||").map(a => a.trim()).filter(Boolean)
+            : [];
+
+        if (acuerdos.length > 0 && !req.query.entidad && !req.query.proveedor &&
+            !req.query.categoria && !req.query.departamento && !req.query.nro_parte) {
+
+            const anios = req.query.anio ? String(req.query.anio).split(",").map(Number) : [];
+
+            if (anios.length > 0 && !req.query.mes) {
+                const [rows] = await pool.query(`
+                    SELECT
+                        SUM(registros) AS registros,
+                        SUM(ordenes) AS ordenes,
+                        ROUND(SUM(ventas), 2) AS ventas,
+                        SUM(entidades) AS entidades,
+                        SUM(marcas) AS marcas
+                    FROM resumen_general_acuerdo_anio
+                    WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")})
+                    AND anio IN (${anios.map(() => "?").join(",")})
+                `, [...acuerdos, ...anios]);
+                return res.json(rows[0]);
+            }
+
+            if (!req.query.anio && !req.query.mes) {
+                const [rows] = await pool.query(`
+                    SELECT
+                        SUM(registros) AS registros,
+                        SUM(ordenes) AS ordenes,
+                        ROUND(SUM(ventas), 2) AS ventas,
+                        SUM(entidades) AS entidades,
+                        SUM(marcas) AS marcas
+                    FROM resumen_general_acuerdo
+                    WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")})
+                `, acuerdos);
+                return res.json(rows[0]);
+            }
+        }
+        const idxResumen = req.query.nro_parte ? "idx_nro_parte_clean"
+            : req.query.entidad ? "idx_ruc_entidad_fecha"
+            : req.query.acuerdo_marco ? "idx_categoria_fecha"
             : req.query.proveedor ? "idx_ruc_proveedor_fecha"
             : req.query.departamento ? "idx_dep_entrega"
             : req.query.categoria ? "idx_categoria_fecha"
@@ -400,7 +450,48 @@ exports.proveedoresTotales = async (req, res) => {
             return res.json(rows);
         }
 
-        const primerFiltro = req.query.entidad ? "idx_ruc_entidad_fecha"
+        const acuerdos = req.query.acuerdo_marco
+            ? String(req.query.acuerdo_marco).split("|||").map(a => a.trim()).filter(Boolean)
+            : [];
+
+        if (acuerdos.length > 0 && !req.query.entidad && !req.query.proveedor &&
+            !req.query.categoria && !req.query.departamento && !req.query.nro_parte) {
+
+            const anios = req.query.anio ? String(req.query.anio).split(",").map(Number) : [];
+
+            if (anios.length > 0 && !req.query.mes) {
+                const [rows] = await pool.query(`
+                    SELECT ruc_proveedor, proveedor,
+                        ROUND(SUM(subtotal), 2) AS subtotal,
+                        SUM(partes) AS partes,
+                        SUM(ocams) AS ocams
+                    FROM resumen_proveedores_acuerdo_anio
+                    WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")})
+                    AND anio IN (${anios.map(() => "?").join(",")})
+                    GROUP BY ruc_proveedor, proveedor
+                    ORDER BY subtotal DESC LIMIT 100
+                `, [...acuerdos, ...anios]);
+                return res.json(rows);
+            }
+
+            if (!req.query.anio && !req.query.mes) {
+                const [rows] = await pool.query(`
+                    SELECT ruc_proveedor, proveedor,
+                        ROUND(SUM(subtotal), 2) AS subtotal,
+                        SUM(partes) AS partes,
+                        SUM(ocams) AS ocams
+                    FROM resumen_proveedores_acuerdo
+                    WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")})
+                    GROUP BY ruc_proveedor, proveedor
+                    ORDER BY subtotal DESC LIMIT 100
+                `, acuerdos);
+                return res.json(rows);
+            }
+        }
+
+       
+        const primerFiltro = req.query.nro_parte ? "idx_nro_parte_clean"
+            : req.query.entidad ? "idx_ruc_entidad_fecha"
             : req.query.acuerdo_marco ? "idx_acuerdo_proveedor"
             : req.query.departamento ? "idx_dep_entrega"
             : req.query.categoria ? "idx_categoria_fecha"
@@ -971,12 +1062,37 @@ exports.obtenerFiltrosDinamicos = async (req, res) => {
                 FROM resumen_filtros_anio
                 WHERE anio = ?
             `, [Number(anio[0])]);
+        } else if (
+            req.query.acuerdo_marco && !req.query.mes &&
+            !req.query.entidad && !req.query.proveedor &&
+            !req.query.categoria && !req.query.departamento && !req.query.nro_parte
+        ) {
+            const acuerdos = String(req.query.acuerdo_marco).split("|||").map(a => a.trim()).filter(Boolean);
+            const aniosFD = req.query.anio ? String(req.query.anio).split(",").map(Number) : [];
+            const tabla = aniosFD.length > 0 ? "resumen_filtros_acuerdo_anio" : "resumen_filtros_acuerdo";
+            const extraWhere = aniosFD.length > 0 ? `AND anio IN (${aniosFD.map(() => "?").join(",")})` : "";
+            const baseParams = aniosFD.length > 0 ? [...acuerdos, ...aniosFD] : acuerdos;
+
+            const [[catsRows], [depsRows], [provsRows], [distsRows]] = await Promise.all([
+                pool.query(`SELECT DISTINCT categoria FROM ${tabla} WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")}) ${extraWhere} AND categoria IS NOT NULL ORDER BY categoria`, baseParams),
+                pool.query(`SELECT DISTINCT dep_entrega FROM ${tabla} WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")}) ${extraWhere} AND dep_entrega IS NOT NULL ORDER BY dep_entrega`, baseParams),
+                pool.query(`SELECT DISTINCT prov_entrega FROM ${tabla} WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")}) ${extraWhere} AND prov_entrega IS NOT NULL ORDER BY prov_entrega`, baseParams),
+                pool.query(`SELECT DISTINCT dist_entrega FROM ${tabla} WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")}) ${extraWhere} AND dist_entrega IS NOT NULL ORDER BY dist_entrega`, baseParams),
+            ]);
+
+            return res.json({
+                categorias:    catsRows.map(r => ({ categoria:    r.categoria })),
+                departamentos: depsRows.map(r => ({ dep_entrega:  r.dep_entrega })),
+                provincias:    provsRows.map(r => ({ prov_entrega: r.prov_entrega })),
+                distritos:     distsRows.map(r => ({ dist_entrega: r.dist_entrega }))
+            });
         } else {
-            const primerFiltroFD = req.query.entidad ? "idx_filtros_dinamicos"
-                : req.query.acuerdo_marco ? "idx_acuerdo_filtros"       
-                : req.query.proveedor ? "idx_ruc_proveedor_fecha"
-                : req.query.categoria ? "idx_categoria_fecha"
-                : "idx_filtros_dinamicos";
+        const primerFiltroFD = req.query.nro_parte ? "idx_nro_parte_clean"
+            : req.query.entidad ? "idx_filtros_dinamicos"
+            : req.query.acuerdo_marco ? "idx_filtros_dinamicos"
+            : req.query.proveedor ? "idx_ruc_proveedor_fecha"
+            : req.query.categoria ? "idx_categoria_fecha"
+            : "idx_filtros_dinamicos";
 
             [rows] = await pool.query(`
                 SELECT categoria, dep_entrega, prov_entrega, dist_entrega
@@ -1017,35 +1133,78 @@ exports.obtenerOrdenesDetalle = async (req, res) => {
 
         const { whereSQL, params } = construirFiltros(req.query);
 
-        const idxDetalle = req.query.entidad ? "idx_ruc_entidad_fecha"
-            : req.query.acuerdo_marco ? "idx_acuerdo_marco"
-            : req.query.proveedor ? "idx_ruc_proveedor_fecha"
-            : req.query.categoria ? "idx_categoria_fecha"
-            : "idx_cov_detalle";
+ let rows;
 
-        const [rows] = await pool.query(`
-            SELECT
-                pi.imagen_url,
-                pi.ficha_url,
-                oe.orden_electronica AS ocam,
-                oe.categoria,
-                oe.nro_parte,
-                oe.razon_social_proveedor,
-                oe.razon_social_entidad,
-                oe.precio_unitario,
-                oe.cantidad_entrega,
-                oe.subtotal,
-                oe.fecha_aceptacion,
-                oe.orden_digitalizada,
-                oe.informe_sustento
-            FROM ordenes_electronicas oe
-            FORCE INDEX (${idxDetalle})
-            LEFT JOIN productos_imagenes pi
-            ON oe.nro_parte_clean = pi.nro_parte_clean
+if (req.query.acuerdo_marco && !req.query.entidad && !req.query.proveedor
+    && !req.query.categoria && !req.query.departamento && !req.query.nro_parte) {
+
+    const acuerdos = String(req.query.acuerdo_marco).split("|||").map(a => a.trim()).filter(Boolean);
+
+    [rows] = await pool.query(`
+        SELECT
+            pi.imagen_url,
+            pi.ficha_url,
+            oe.orden_electronica AS ocam,
+            oe.categoria,
+            oe.nro_parte,
+            oe.razon_social_proveedor,
+            oe.razon_social_entidad,
+            oe.precio_unitario,
+            oe.cantidad_entrega,
+            oe.subtotal,
+            oe.fecha_aceptacion,
+            oe.orden_digitalizada,
+            oe.informe_sustento
+        FROM (
+            SELECT *
+            FROM resumen_detalle_acuerdo
+            WHERE codigo_acuerdo_marco IN (${acuerdos.map(() => "?").join(",")})
+            ORDER BY fecha_aceptacion DESC
+            LIMIT ? OFFSET ?
+        ) oe
+        LEFT JOIN productos_imagenes pi
+        ON oe.nro_parte_clean = pi.nro_parte_clean
+    `, [...acuerdos, limit, offset]);
+
+} else {
+
+    const idxDetalle = req.query.nro_parte ? "idx_nro_parte_clean"
+        : req.query.entidad ? "idx_ruc_entidad_fecha"
+        : req.query.proveedor ? "idx_ruc_proveedor_fecha"
+        : req.query.categoria ? "idx_categoria_fecha"
+        : "idx_cov_detalle";
+
+    [rows] = await pool.query(`
+        SELECT
+            pi.imagen_url,
+            pi.ficha_url,
+            oe.orden_electronica AS ocam,
+            oe.categoria,
+            oe.nro_parte,
+            oe.razon_social_proveedor,
+            oe.razon_social_entidad,
+            oe.precio_unitario,
+            oe.cantidad_entrega,
+            oe.subtotal,
+            oe.fecha_aceptacion,
+            oe.orden_digitalizada,
+            oe.informe_sustento
+        FROM (
+            SELECT codigo_acuerdo_marco, fecha_aceptacion, nro_parte_clean,
+                orden_electronica, categoria, nro_parte,
+                ruc_proveedor, razon_social_proveedor,
+                ruc_entidad, razon_social_entidad,
+                precio_unitario, cantidad_entrega, subtotal,
+                orden_digitalizada, informe_sustento
+            FROM ordenes_electronicas oe USE INDEX (${idxDetalle})
             ${whereSQL}
             ORDER BY oe.fecha_aceptacion DESC
             LIMIT ? OFFSET ?
-        `, [...params, limit, offset]);
+        ) oe
+        LEFT JOIN productos_imagenes pi
+        ON oe.nro_parte_clean = pi.nro_parte_clean
+    `, [...params, limit, offset]);
+}
 
         res.json(rows);
 
@@ -1084,8 +1243,47 @@ exports.entidadesTotales = async (req, res) => {
             return res.json(rows);
         }
 
-        const primerFiltroEnt = req.query.entidad ? "idx_ruc_entidad_fecha"
-            : req.query.acuerdo_marco ? "idx_acuerdo_marco"
+        const acuerdos = req.query.acuerdo_marco
+            ? String(req.query.acuerdo_marco).split("|||").map(a => a.trim()).filter(Boolean)
+            : [];
+
+        if (acuerdos.length > 0 && !req.query.entidad && !req.query.proveedor &&
+            !req.query.categoria && !req.query.departamento && !req.query.nro_parte) {
+
+            const anios = req.query.anio ? String(req.query.anio).split(",").map(Number) : [];
+
+            if (anios.length > 0 && !req.query.mes) {
+                const [rows] = await pool.query(`
+                    SELECT entidad,
+                        ROUND(SUM(subtotal), 2) AS subtotal,
+                        SUM(ordenes) AS ordenes
+                    FROM resumen_entidades_acuerdo_anio
+                    WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")})
+                    AND anio IN (${anios.map(() => "?").join(",")})
+                    GROUP BY ruc_entidad, entidad
+                    ORDER BY subtotal DESC LIMIT 100
+                `, [...acuerdos, ...anios]);
+                return res.json(rows);
+            }
+
+            if (!req.query.anio && !req.query.mes) {
+                const [rows] = await pool.query(`
+                    SELECT entidad,
+                        ROUND(SUM(subtotal), 2) AS subtotal,
+                        SUM(ordenes) AS ordenes
+                    FROM resumen_entidades_acuerdo
+                    WHERE acuerdo IN (${acuerdos.map(() => "?").join(",")})
+                    GROUP BY ruc_entidad, entidad
+                    ORDER BY subtotal DESC LIMIT 100
+                `, acuerdos);
+                return res.json(rows);
+            }
+        }
+      
+
+        const primerFiltroEnt = req.query.nro_parte ? "idx_nro_parte_clean"
+            : req.query.entidad ? "idx_ruc_entidad_fecha"
+            : req.query.acuerdo_marco ? "idx_categoria_fecha"
             : req.query.proveedor ? "idx_ruc_proveedor_fecha"
             : req.query.departamento ? "idx_dep_entrega"
             : req.query.categoria ? "idx_categoria_fecha"
@@ -1141,11 +1339,12 @@ exports.buscarNroParte = async (req, res) => {
         // =========================
 
         if (!nro_parte || nro_parte.trim() === "") {
-
             return res.json({
                 encontrado: false
             });
         }
+        console.log("NRO PARTE RECIBIDO:", nro_parte);
+        console.log("NRO PARTE LIMPIO:", nro_parte.trim().replace(/\s+/g, "").replace(/-/g, "").toUpperCase());
 
         // =========================
         // LIMPIAR NRO PARTE
@@ -1175,6 +1374,9 @@ exports.buscarNroParte = async (req, res) => {
             provincia,
             distrito
         });
+
+
+
 
         // =========================
         // QUERY

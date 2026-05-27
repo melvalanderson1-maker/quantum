@@ -9,6 +9,17 @@ const usuariosRoutes = require("./src/routes/usuarios.routes");
 const compression = require("compression");
 const analyticsRoutes = require("./src/routes/analytics.routes");
 
+
+const dashboardRoutes = require("./src/routes/dashboard.routes");
+
+const sensoresRoutes = require("./src/routes/sensores.routes");
+
+const terrenosRoutes = require("./src/routes/terrenos.routes");
+
+const filtrosRoutes = require("./src/routes/filtros.routes");
+
+
+
 const app = express();
 
 
@@ -57,5 +68,15 @@ app.use("/api/clientes", clientesRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 
 app.use("/api/analytics", analyticsRoutes);
+
+
+app.use("/api/dashboard", dashboardRoutes);
+
+app.use("/api/sensores", sensoresRoutes);
+
+
+app.use("/api/terrenos", terrenosRoutes);
+
+app.use("/api/filtros", filtrosRoutes);
 
 module.exports = app;
