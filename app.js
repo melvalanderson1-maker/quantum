@@ -18,6 +18,8 @@ const terrenosRoutes = require("./src/routes/terrenos.routes");
 
 const filtrosRoutes = require("./src/routes/filtros.routes");
 
+const lecturasRouter = require("./src/routes/lecturas.routes");
+
 
 
 const app = express();
@@ -78,5 +80,7 @@ app.use("/api/sensores", sensoresRoutes);
 app.use("/api/terrenos", terrenosRoutes);
 
 app.use("/api/filtros", filtrosRoutes);
+
+app.use("/api/lecturas", lecturasRouter);
 
 module.exports = app;

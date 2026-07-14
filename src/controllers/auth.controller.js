@@ -202,3 +202,67 @@ exports.login = async (req, res) => {
         permisos
     });
 };
+
+
+exports.refresh = async (req, res) => {
+
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+        return res.status(401).json({ message: "No hay sesión" });
+    }
+
+    let payload;
+
+    try {
+        payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch (err) {
+        return res.status(401).json({ message: "Sesión expirada" });
+    }
+
+    const [sessionsRows] = await pool.query(
+        `SELECT * FROM sessions
+         WHERE user_id = ? AND revoked = FALSE AND expires_at > NOW()
+         ORDER BY expires_at DESC LIMIT 1`,
+        [payload.id]
+    );
+
+    if (sessionsRows.length === 0) {
+        return res.status(401).json({ message: "Sesión revocada o expirada" });
+    }
+
+    const session = sessionsRows[0];
+
+    const matches = await bcrypt.compare(refreshToken, session.refresh_token_hash);
+
+    if (!matches) {
+        return res.status(401).json({ message: "Token inválido" });
+    }
+
+    const [userRows] = await pool.query(
+        "SELECT * FROM usuarios WHERE id = ?",
+        [payload.id]
+    );
+
+    if (userRows.length === 0) {
+        return res.status(401).json({ message: "Usuario no existe" });
+    }
+
+    const user = userRows[0];
+
+    const newToken = jwt.sign(
+        { id: user.id, rol: user.rol },
+        process.env.JWT_SECRET,
+        { expiresIn: "15m" }
+    );
+
+    const isProduction = process.env.NODE_ENV === "production";
+
+    res.cookie("token", newToken, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax"
+    });
+
+    return res.json({ ok: true });
+};

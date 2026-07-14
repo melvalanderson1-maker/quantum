@@ -9,7 +9,7 @@ const cookie = require("cookie");
 const app = require("./app");
 const pool = require("./src/config/db");
 
-const PORT = 3000;
+const PORT = 7000;
 
 const server = http.createServer(app);
 

@@ -1,201 +1,117 @@
+// controllers/lecturas.controller.js
 const pool = require("../config/db");
 
-// =====================================================
-// BUILDER FILTROS
-// =====================================================
+exports.lecturasPorNodo = async (req, res) => {
+  try {
+    const { nodo_id, dias = 30 } = req.query;
 
-const construirFiltros = (query) => {
-
-    const {
-        terreno_id,
-        cliente_id,
-        fecha_inicio,
-        fecha_fin,
-        departamento,
-        provincia,
-        distrito
-    } = query;
-
-    let where = [];
-    let params = [];
-
-    // ======================================
-    // TERRENO
-    // ======================================
-
-    if (terreno_id) {
-
-        where.push(`t.id = ?`);
-
-        params.push(terreno_id);
+    if (!nodo_id) {
+      return res.status(400).json({ error: "nodo_id requerido" });
     }
 
-    // ======================================
-    // CLIENTE
-    // ======================================
+    const [rows] = await pool.query(
+      `SELECT
+         DATE(l.timestamp_utc)     AS fecha,
+         TIME(l.timestamp_utc)     AS hora,
+         l.timestamp_utc,
+         i.nombre                  AS indicador,
+         i.unidad,
+         AVG(l.valor)              AS valor_promedio,
+         MIN(l.valor)              AS valor_min,
+         MAX(l.valor)              AS valor_max,
+         l.calidad
+       FROM lecturas_sensor l
+       INNER JOIN indicadores i ON i.id = l.indicador_id
+       WHERE l.nodo_id = ?
+         AND l.timestamp_utc >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND l.calidad != 'error'
+       GROUP BY DATE(l.timestamp_utc), l.indicador_id
+       ORDER BY l.timestamp_utc ASC`,
+      [nodo_id, dias]
+    );
 
-    if (cliente_id) {
-
-        where.push(`c.id = ?`);
-
-        params.push(cliente_id);
+    const agrupado = {};
+    for (const row of rows) {
+      if (!agrupado[row.indicador]) {
+        agrupado[row.indicador] = { unidad: row.unidad, datos: [] };
+      }
+      agrupado[row.indicador].datos.push({
+        fecha:     row.fecha,
+        hora:      row.hora,
+        timestamp: row.timestamp_utc,
+        valor:     parseFloat(row.valor_promedio),
+        min:       parseFloat(row.valor_min),
+        max:       parseFloat(row.valor_max),
+        calidad:   row.calidad
+      });
     }
 
-    // ======================================
-    // FECHA INICIO
-    // ======================================
-
-    if (fecha_inicio) {
-
-        where.push(`ls.fecha_lectura >= ?`);
-
-        params.push(fecha_inicio);
-    }
-
-    // ======================================
-    // FECHA FIN
-    // ======================================
-
-    if (fecha_fin) {
-
-        where.push(`ls.fecha_lectura <= ?`);
-
-        params.push(fecha_fin);
-    }
-
-    // ======================================
-    // DEPARTAMENTO
-    // ======================================
-
-    if (departamento) {
-
-        where.push(`dep.nombre = ?`);
-
-        params.push(departamento);
-    }
-
-    // ======================================
-    // PROVINCIA
-    // ======================================
-
-    if (provincia) {
-
-        where.push(`prov.nombre = ?`);
-
-        params.push(provincia);
-    }
-
-    // ======================================
-    // DISTRITO
-    // ======================================
-
-    if (distrito) {
-
-        where.push(`dist.nombre = ?`);
-
-        params.push(distrito);
-    }
-
-    const whereSQL = where.length > 0
-        ? `WHERE ${where.join(" AND ")}`
-        : "";
-
-    return {
-        whereSQL,
-        params
-    };
+    res.json({ nodo_id, agrupado });
+  } catch (err) {
+    console.error("LECTURAS ERROR:", err);
+    res.status(500).json({ error: "Error al obtener lecturas" });
+  }
 };
 
-// =====================================================
-// GRAFICO HUMEDAD
-// =====================================================
 
-exports.graficoHumedad = async (req, res) => {
+exports.lecturasPorTerreno = async (req, res) => {
+  try {
+    const { terreno_id, dias = 30 } = req.query;
 
-    try {
-
-        const {
-            whereSQL,
-            params
-        } = construirFiltros(req.query);
-
-        const [rows] = await pool.query(`
-            SELECT
-                DATE(ls.fecha_lectura) AS fecha,
-                ROUND(AVG(ls.humedad_suelo), 2) AS valor
-            FROM lecturas_sensor ls
-            INNER JOIN nodos_sensor ns
-                ON ns.id = ls.nodo_sensor_id
-            INNER JOIN terrenos t
-                ON t.id = ns.terreno_id
-            INNER JOIN clientes c
-                ON c.id = t.cliente_id
-            LEFT JOIN departamentos dep
-                ON dep.id = t.departamento_id
-            LEFT JOIN provincias prov
-                ON prov.id = t.provincia_id
-            LEFT JOIN distritos dist
-                ON dist.id = t.distrito_id
-            ${whereSQL}
-            GROUP BY DATE(ls.fecha_lectura)
-            ORDER BY fecha ASC
-        `, params);
-
-        res.json(rows);
-
-    } catch (error) {
-
-        console.log(error);
-
-        res.status(500).json({
-            message: "ERROR_GRAFICO_HUMEDAD"
-        });
+    if (!terreno_id) {
+      return res.status(400).json({ error: "terreno_id requerido" });
     }
-};
 
-// =====================================================
-// GRAFICO TEMPERATURA
-// =====================================================
+    const [rows] = await pool.query(
+      `SELECT
+         n.id                      AS nodo_id,
+         n.nombre                  AS nodo_nombre,
+         n.latitud,
+         n.longitud,
+         DATE(l.timestamp_utc)     AS fecha,
+         l.timestamp_utc,
+         i.nombre                  AS indicador,
+         i.unidad,
+         AVG(l.valor)              AS valor_promedio,
+         l.calidad
+       FROM lecturas_sensor l
+       INNER JOIN nodos_sensor n  ON n.id = l.nodo_id
+       INNER JOIN indicadores i   ON i.id = l.indicador_id
+       WHERE l.terreno_id = ?
+         AND l.timestamp_utc >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND l.calidad != 'error'
+       GROUP BY l.nodo_id, DATE(l.timestamp_utc), l.indicador_id
+       ORDER BY n.id, i.nombre, l.timestamp_utc ASC`,
+      [terreno_id, dias]
+    );
 
-exports.graficoTemperatura = async (req, res) => {
-
-    try {
-
-        const {
-            whereSQL,
-            params
-        } = construirFiltros(req.query);
-
-        const [rows] = await pool.query(`
-            SELECT
-                DATE(ls.fecha_lectura) AS fecha,
-                ROUND(AVG(ls.temperatura), 2) AS valor
-            FROM lecturas_sensor ls
-            INNER JOIN nodos_sensor ns
-                ON ns.id = ls.nodo_sensor_id
-            INNER JOIN terrenos t
-                ON t.id = ns.terreno_id
-            INNER JOIN clientes c
-                ON c.id = t.cliente_id
-            LEFT JOIN departamentos dep
-                ON dep.id = t.departamento_id
-            LEFT JOIN provincias prov
-                ON prov.id = t.provincia_id
-            LEFT JOIN distritos dist
-                ON dist.id = t.distrito_id
-            ${whereSQL}
-            GROUP BY DATE(ls.fecha_lectura)
-            ORDER BY fecha ASC
-        `, params);
-
-        res.json(rows);
-
-    } catch (error) {
-
-        console.log(error);
-
-        res.status(500).json({
-            message: "ERROR_GRAFICO_TEMPERATURA"
-        });
+    const porNodo = {};
+    for (const row of rows) {
+      if (!porNodo[row.nodo_id]) {
+        porNodo[row.nodo_id] = {
+          nombre:      row.nodo_nombre,
+          latitud:     row.latitud,
+          longitud:    row.longitud,
+          indicadores: {}
+        };
+      }
+      if (!porNodo[row.nodo_id].indicadores[row.indicador]) {
+        porNodo[row.nodo_id].indicadores[row.indicador] = {
+          unidad: row.unidad,
+          datos:  []
+        };
+      }
+      porNodo[row.nodo_id].indicadores[row.indicador].datos.push({
+        fecha:     row.fecha,
+        timestamp: row.timestamp_utc,
+        valor:     parseFloat(row.valor_promedio),
+        calidad:   row.calidad
+      });
     }
+
+    res.json({ terreno_id, porNodo });
+  } catch (err) {
+    console.error("LECTURAS TERRENO ERROR:", err);
+    res.status(500).json({ error: "Error al obtener lecturas del terreno" });
+  }
 };
